@@ -4,16 +4,21 @@ import json
 import pandas as pd
 import time
 from typing import Any, Dict, List, Tuple
+import os
 
 
-st.set_page_config(page_title="Health Insight (OpenAI-only)", page_icon="🩺", layout="wide")
+api_key = (
+    st.secrets.get("OPENAI_API_KEY")
+    or os.environ.get("OPENAI_API_KEY")
+)
+
+if not api_key:
+    st.error("Λείπει το OpenAI API key. Πρόσθεσέ το στα Secrets ως OPENAI_API_KEY.")
+    st.stop()
+
+client = OpenAI(api_key=api_key)
 
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# ---------------------------
-# PROMPT + JSON SCHEMA
-# ---------------------------
 SYSTEM_INSTRUCTIONS = """
 You are a careful medical information formatter. You NEVER give medical advice.
 You ONLY return JSON that fits the schema. If you don't know something, estimate clearly and keep values plausible.
