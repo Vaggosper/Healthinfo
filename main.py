@@ -164,29 +164,34 @@ def sanitize_info(info: Dict[str, Any]) -> Dict[str, Any]:
     return info
 
 @st.cache_data(show_spinner=False, ttl=600)
-def call_openai(disease: str) -> Tuple[bool, Dict[str, Any], str]:
-    # Ασφαλής αντικατάσταση placeholder χωρίς .format
+def call_openai(disease: str) -> tuple[bool, dict, str]:
+    """
+    Χρήση Chat Completions API (σταθερό στο SDK σου) με forced JSON.
+    Επιστρέφει (ok, data, raw_or_error).
+    """
     user_text = USER_TEMPLATE.replace("__DISEASE__", disease)
-    prompt = SYSTEM_INSTRUCTIONS.strip() + "\n\n" + user_text.strip()
 
     last = ""
     for attempt in range(1, 4):
         try:
-            resp = client.responses.create(
-                model=MODEL_NAME,
+            resp = client.chat.completions.create(
+                model="gpt-4.1-mini",  # π.χ. "gpt-4o-mini" ή "gpt-4.1-mini"
                 response_format={"type": "json_object"},
                 temperature=0.2,
-                max_output_tokens=1200,
-                input=prompt,
+                timeout=40,
+                messages=[
+                    {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                    {"role": "user", "content": user_text},
+                ],
             )
-            raw_text = getattr(resp, "output_text", "")
-            data = safe_load_json(raw_text)
+            raw = resp.choices[0].message.content or ""
+            data = safe_load_json(raw)
             if data:
-                return True, sanitize_info(data), raw_text
+                return True, sanitize_info(data), raw
             last = "Invalid JSON from model"
         except Exception as ex:
             last = f"{type(ex).__name__}: {ex}"
-        time.sleep(0.5 * (2 ** (attempt - 1)))
+            time.sleep(0.5 * (2 ** (attempt - 1)))
     return False, {}, last
 
 def render_stats(info: Dict[str, Any]):
@@ -280,6 +285,7 @@ if st.button("Ανάλυση") and disease.strip():
             st.write(raw if isinstance(raw, str) else repr(raw))
 else:
     st.write("👆 Γράψε μια ασθένεια και πάτα *Ανάλυση* για να ξεκινήσουμε.")
+
 
 
 
