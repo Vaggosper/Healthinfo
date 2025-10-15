@@ -1,3 +1,4 @@
+# main.py
 import os, re, time, json
 from typing import Any, Dict, List, Tuple
 
@@ -5,19 +6,19 @@ import streamlit as st
 import pandas as pd
 from openai import OpenAI
 
-
+# ---------- PAGE ----------
 st.set_page_config(page_title="Health Insight — OpenAI-only", page_icon="🩺", layout="wide")
 
-
+# ---------- OPENAI KEY ----------
 API_KEY = st.secrets.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
     st.error("Λείπει το OpenAI API key. Πρόσθεσέ το στα Secrets ως OPENAI_API_KEY.")
     st.stop()
 client = OpenAI(api_key=API_KEY)
 
-MODEL_NAME = "gpt-4o-mini"  
+MODEL_NAME = "gpt-4o-mini"  # σταθερό/γρήγορο
 
-
+# ---------- PROMPTS ----------
 SYSTEM_INSTRUCTIONS = """
 You are a careful medical information formatter. You NEVER give medical advice.
 You ONLY return JSON that fits the schema. If you don't know something, estimate conservatively.
@@ -53,7 +54,7 @@ Rules:
 - Output MUST be valid JSON with double quotes only. No markdown, no backticks, no text outside JSON.
 """
 
-
+# ---------- HELPERS ----------
 def coerce_pct(s: Any) -> float:
     try:
         return float(str(s).strip().replace("%", "").replace(",", "."))
@@ -61,47 +62,50 @@ def coerce_pct(s: Any) -> float:
         return 0.0
 
 def extract_json_block(text: str) -> str:
-    """Πάρε το πρώτο {...} block ακόμα κι αν υπάρχει κείμενο γύρω γύρω."""
+    """Πάρε το πρώτο {...} block ακόμη κι αν έχει έξτρα κείμενο τριγύρω."""
     if not isinstance(text, str):
         return ""
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
         return text[start:end+1]
-    # fallback με regex (nested-safe για απλές περιπτώσεις)
-    m = re.search(r"\{(?:[^{}]|(?R))*\}", text, flags=re.DOTALL)
+    # απλό regex fallback
+    m = re.search(r"\{.*\}", text, flags=re.DOTALL)
     return m.group(0) if m else ""
 
 def safe_load_json(text: str) -> Dict[str, Any]:
     try:
         return json.loads(text)
     except Exception:
-        # δεύτερη ευκαιρία: εξαγωγή block
         block = extract_json_block(text)
         if block:
             try:
                 return json.loads(block)
             except Exception:
-                pass
-    return {}
+                return {}
+        return {}
 
 @st.cache_data(show_spinner=False, ttl=600)
 def call_openai(disease: str) -> Tuple[bool, Dict[str, Any], str]:
-    """Κλήση με retries + 2-στάδια JSON parsing. Επιστρέφει (ok, data, raw_or_error)."""
+    """
+    Χρήση Responses API (σταθερότερο από chat.completions σε 2.x βιβλιοθήκη).
+    Επιστρέφει (ok, data, raw_or_error).
+    """
     last = ""
     for _ in range(3):
         try:
-            resp = client.chat.completions.create(
+            resp = client.responses.create(
                 model=MODEL_NAME,
                 response_format={"type": "json_object"},
-                messages=[
+                temperature=0.2,
+                max_output_tokens=1200,
+                input=[
                     {"role": "system", "content": SYSTEM_INSTRUCTIONS},
                     {"role": "user", "content": USER_TEMPLATE.format(disease=disease)}
                 ],
-                temperature=0.2,
-                timeout=40
             )
-            raw = resp.choices[0].message.content
+            # Η 2.x βιβλιοθήκη δίνει helper:
+            raw = resp.output_text  # σκέτο string
             data = safe_load_json(raw)
             if data:
                 return True, data, raw
@@ -160,7 +164,7 @@ def render_meds(info: Dict[str, Any]):
             for s in se:
                 st.write(f"· {s}")
 
-
+# ---------- UI ----------
 st.title("🩺 Health Insight — OpenAI-only")
 st.caption("Εκπαιδευτικό εργαλείο. Δεν παρέχει ιατρικές συμβουλές. Χωρίς εξωτερικά APIs (μόνο OpenAI).")
 
@@ -202,6 +206,5 @@ if st.button("Ανάλυση") and disease.strip():
             st.write(raw if isinstance(raw, str) else repr(raw))
 else:
     st.write("👆 Γράψε μια ασθένεια και πάτα *Ανάλυση* για να ξεκινήσουμε.")
-
 
 
