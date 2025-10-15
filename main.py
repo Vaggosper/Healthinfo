@@ -16,7 +16,7 @@ if not API_KEY:
     st.stop()
 client = OpenAI(api_key=API_KEY)
 
-MODEL_NAME = "gpt-4o-mini"  # σταθερό/γρήγορο
+MODEL_NAME = "gpt-4o-mini"  # γρήγορο/φθηνό
 
 # ---------- PROMPTS ----------
 SYSTEM_INSTRUCTIONS = """
@@ -62,14 +62,13 @@ def coerce_pct(s: Any) -> float:
         return 0.0
 
 def extract_json_block(text: str) -> str:
-    """Πάρε το πρώτο {...} block ακόμη κι αν έχει έξτρα κείμενο τριγύρω."""
+    """Πάρε το πρώτο {...} block ακόμη κι αν έχει κείμενο γύρω-γύρω."""
     if not isinstance(text, str):
         return ""
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
-        return text[start:end+1]
-    # απλό regex fallback
+        return text[start:end + 1]
     m = re.search(r"\{.*\}", text, flags=re.DOTALL)
     return m.group(0) if m else ""
 
@@ -82,16 +81,20 @@ def safe_load_json(text: str) -> Dict[str, Any]:
             try:
                 return json.loads(block)
             except Exception:
-                return {}
-        return {}
+                pass
+    return {}
 
 @st.cache_data(show_spinner=False, ttl=600)
 def call_openai(disease: str) -> Tuple[bool, Dict[str, Any], str]:
     """
-    Χρήση Responses API (σταθερότερο από chat.completions σε 2.x βιβλιοθήκη).
+    Χρήση Responses API με input ως ΕΝΑ string (σωστός τρόπος).
     Επιστρέφει (ok, data, raw_or_error).
     """
     last = ""
+    user_text = USER_TEMPLATE.format(disease=disease)
+    # Ενώνουμε system + user σε ένα καθαρό prompt-string
+    prompt = SYSTEM_INSTRUCTIONS.strip() + "\n\n" + user_text.strip()
+
     for _ in range(3):
         try:
             resp = client.responses.create(
@@ -99,13 +102,9 @@ def call_openai(disease: str) -> Tuple[bool, Dict[str, Any], str]:
                 response_format={"type": "json_object"},
                 temperature=0.2,
                 max_output_tokens=1200,
-                input=[
-                    {"role": "system", "content": SYSTEM_INSTRUCTIONS},
-                    {"role": "user", "content": USER_TEMPLATE.format(disease=disease)}
-                ],
+                input=prompt,  # <-- ΣΗΜΑΝΤΙΚΟ: string, ΟΧΙ messages
             )
-            # Η 2.x βιβλιοθήκη δίνει helper:
-            raw = resp.output_text  # σκέτο string
+            raw = resp.output_text  # string
             data = safe_load_json(raw)
             if data:
                 return True, data, raw
@@ -206,5 +205,4 @@ if st.button("Ανάλυση") and disease.strip():
             st.write(raw if isinstance(raw, str) else repr(raw))
 else:
     st.write("👆 Γράψε μια ασθένεια και πάτα *Ανάλυση* για να ξεκινήσουμε.")
-
 
