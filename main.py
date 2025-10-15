@@ -1,4 +1,4 @@
-# main.py
+
 import os, re, time, json
 from typing import Any, Dict, List, Tuple, Optional
 
@@ -6,26 +6,26 @@ import streamlit as st
 import pandas as pd
 from openai import OpenAI
 
-# ---------- PAGE ----------
+
 st.set_page_config(page_title="Health Insight — OpenAI-only", page_icon="🩺", layout="wide")
 
-# ---------- OPENAI KEY ----------
+
 API_KEY = st.secrets.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
     st.error("Λείπει το OpenAI API key. Πρόσθεσέ το στα Secrets ως OPENAI_API_KEY.")
     st.stop()
 client = OpenAI(api_key=API_KEY)
 
-MODEL_NAME = "gpt-4o-mini"  # γρήγορο/φθηνό
+MODEL_NAME = "gpt-4.1-mini"  
 
-# ---------- PROMPTS ----------
+
 SYSTEM_INSTRUCTIONS = """
 You are a careful medical information formatter. You NEVER give medical advice.
 You ONLY return JSON that fits the schema. If you don't know something, estimate conservatively.
 Percentages must be strings with a percent sign (e.g., "72.4%"). Integers must be integers.
 """
 
-# Χρησιμοποιούμε ασφαλή placeholder __DISEASE__ για να αποφύγουμε το Python .format με αγκύλες JSON
+
 USER_TEMPLATE = """
 Provide structured, didactic information about the disease: "__DISEASE__".
 Return STRICT JSON (no prose outside JSON) with the following schema:
@@ -55,7 +55,7 @@ Rules:
 - Output MUST be valid JSON with double quotes only. No markdown, no backticks, no text outside JSON.
 """
 
-# ---------- HELPERS ----------
+
 def coerce_pct(s: Any) -> float:
     try:
         return float(str(s).strip().replace("%", "").replace(",", "."))
@@ -175,7 +175,7 @@ def call_openai(disease: str) -> tuple[bool, dict, str]:
     for attempt in range(1, 4):
         try:
             resp = client.chat.completions.create(
-                model="gpt-4.1-mini",  # π.χ. "gpt-4o-mini" ή "gpt-4.1-mini"
+                model="gpt-4.1-mini", 
                 response_format={"type": "json_object"},
                 temperature=0.2,
                 timeout=40,
@@ -243,7 +243,7 @@ def render_meds(info: Dict[str, Any]):
             for s in se:
                 st.write(f"· {s}")
 
-# ---------- UI ----------
+
 st.title("🩺 Health Insight — OpenAI-only")
 st.caption("Εκπαιδευτικό εργαλείο. Δεν παρέχει ιατρικές συμβουλές. Χωρίς εξωτερικά APIs (μόνο OpenAI).")
 
@@ -285,6 +285,7 @@ if st.button("Ανάλυση") and disease.strip():
             st.write(raw if isinstance(raw, str) else repr(raw))
 else:
     st.write("👆 Γράψε μια ασθένεια και πάτα *Ανάλυση* για να ξεκινήσουμε.")
+
 
 
 
